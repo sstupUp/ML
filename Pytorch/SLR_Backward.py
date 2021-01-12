@@ -33,6 +33,8 @@ def training_loop(n_epochs, learning_rate, params, t_u, t_c):
         # Pytorch can automatically calculate them
         loss.backward()
 
+        # .no_grad() protects the dynamic tree from being corrupted when we update the params
+        # It makes Pytorch look away from the params
         with torch.no_grad():
             params -= learning_rate * params.grad
 
@@ -44,10 +46,10 @@ def training_loop(n_epochs, learning_rate, params, t_u, t_c):
 t_un = t_u * 0.1
 
 params = training_loop(
-n_epochs = 5000,
-learning_rate = 1e-2,
-params = torch.tensor([1.0, 0.0], requires_grad=True),
-t_u = t_un,
-t_c = t_c)
+    n_epochs = 5000,
+    learning_rate = 1e-2,
+    params = torch.tensor([1.0, 0.0], requires_grad=True),
+    t_u = t_un,
+    t_c = t_c)
 
 print(params)
