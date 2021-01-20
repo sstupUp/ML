@@ -6,18 +6,27 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 import torch.nn.functional as f
 
+# Hyperparameters
+batch_size = 4
+learning_rate = 1e-4
+if torch.cuda.is_available():
+    device = 'cuda'
+else:
+    device = 'cpu'
+
 # Load datasets(CIFAR10)
 path = './'
-transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize((0.49, 0.49, 0.49), (0.49, 0.49, 0.49))])
 
-cifar10_t = dsets.CIFAR10(path, download=True, train=True, transform=transform)
-cifar10_val = dsets.CIFAR10(path, download=True, train=False, transform=transform)
-data = util.DataLoader(cifar10_t, batch_size=4, shuffle=True)
-data_val = util.DataLoader(cifar10_val, batch_size=4, shuffle=True)
+cifar10_t = dsets.CIFAR10(path, download=True, train=True, transform=transforms.ToTensor())
+cifar10_val = dsets.CIFAR10(path, download=True, train=False, transform=transforms.ToTensor())
+
+# Normalize the datasets
+
+data = util.DataLoader(cifar10_t, batch_size=batch_size, shuffle=True)
+data_val = util.DataLoader(cifar10_val, batch_size=batch_size, shuffle=True)
 
 class_name = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+
 
 # Build a model
 class ConvNet(nn.Module):
@@ -44,10 +53,8 @@ class ConvNet(nn.Module):
         return x
 
 
-
 # Optimizer & loss
-model = ConvNet()
-learning_rate = 1e-4
+model = ConvNet().to(device)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 loss = nn.CrossEntropyLoss()
 
@@ -56,9 +63,9 @@ loss = nn.CrossEntropyLoss()
 def training_loop(n_epoch, network, optim_fn, loss_fn, data_t):
     for i in range(0, n_epoch + 1):
         for n, target in enumerate(data_t):
-            img, label = target
-            # img = img.to('cuda')
-            # label = label.to('cuda')
+            img, lable = target
+            img = img.to(device)
+            lable = lable.to(device)
             # forward
             prediction = network(img)
             loss_train = loss_fn(prediction, label)
@@ -74,6 +81,7 @@ def training_loop(n_epoch, network, optim_fn, loss_fn, data_t):
             if (n >= 12000) & (n % 10 == 0):
                 print(f"Epoch: {i}, Batch: {n}, Training loss {loss_train.item():.4f},")
 
+
 # run
 n_epochs = 3
 training_loop(
@@ -83,11 +91,7 @@ training_loop(
     loss_fn=loss,
     data_t=data)
 
-
 print('Calculating Accuracy...')
-
-device = 'cuda'
-batch_size = 4
 
 with torch.no_grad():
     n_correct = 0
@@ -95,9 +99,9 @@ with torch.no_grad():
     n_class_correct = [0 for i in range(10)]
     n_class_samples = [0 for i in range(10)]
     for images, labels in data_val:
-        # images = images.to(device)
-        # labels = labels.to(device)
-        outputs = model(images)
+        images = images.to(device)
+        labels = labels.to(device)
+        outputs = model(images).to(device)
         # max returns (value ,index)
         _, predicted = torch.max(outputs, 1)
         n_samples += labels.size(0)
