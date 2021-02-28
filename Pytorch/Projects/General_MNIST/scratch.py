@@ -1,4 +1,6 @@
 import numpy as np
+import torch
+from scipy import ndimage
 
 data = [[1, 2, 3],
         [4, 5, 6],
@@ -9,16 +11,6 @@ c, s = np.cos(theta), np.sin(theta)
 R = np.array(((c, -s), (s, c)))
 ndata = np.zeros((3, 3))
 
-for x in range(3):
-    for y in range(3):
-        tmp = np.zeros((2, 1))
-        tmp = [[x], [y]]
-        new = np.dot(R, tmp)
-        new = np.round(new)
-        n_x = int(new[0, 0])
-        n_y = int(new[1, 0])
-
-        ndata[n_x][n_y] = data[2 - x][2 - y]
-
-print(new)
-print(ndata)
+new_img = ndimage.rotate(data, 90, reshape=False)
+new_img = ndimage.rotate(data, 90, reshape=False)
+print(new_img)

@@ -24,6 +24,7 @@ mnist_val = dsets.MNIST(path, download=True, train=False, transform=transforms.T
 original = util.DataLoader(mnist_t, shuffle=True)
 original_val = util.DataLoader(mnist_val, shuffle=True)
 
+class_name = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
 class ConvNet(nn.Module):
     def __init__(self):
@@ -58,24 +59,14 @@ loss = nn.CrossEntropyLoss()
 def training_loop(n_epoch, network, optim_fn, loss_fn, data_t):
     for i in range(0, n_epoch + 1):
         for n, target in enumerate(data_t):
+
             img, label = target
-            img = img.to(device)
-            label = label.to(device)
-
-            # forward
-            prediction = network(img)
-            loss_train = loss_fn(prediction.view(1, -1), label)
-
-            # backward
-            optimizer.zero_grad()
-            loss_train.backward()
-            optimizer.step()
 
             for theta in range(65):
-                new_img = torch.zeros(1, 28, 28)
-                new_img = ndimage.rotate(img.cpu().view(1, 28, 28), theta*5, reshape=False)
+                new_img = ndimage.rotate(img, theta*5, reshape=False)
                 new_img = torch.from_numpy(new_img)
                 new_img = new_img.to(device)
+                label = label.to(device)
 
                 # forward
                 prediction = network(new_img.view(1, 1, 28, 28))
@@ -86,9 +77,21 @@ def training_loop(n_epoch, network, optim_fn, loss_fn, data_t):
                 loss_train.backward()
                 optimizer.step()
 
+            img = img.to(device)
+            # forward
+            prediction = network(img)
+            loss_train = loss_fn(prediction.view(1, -1), label)
+
+            # backward
+            optimizer.zero_grad()
+            loss_train.backward()
+            optimizer.step()
+            new_img = torch.zeros(1, 28, 28)
+
             print(f"Epoch: {i}, {n}th data, Training loss {loss_train.item():.4f},")
 
             torch.cuda.empty_cache()
+
 
 n_epochs = 1
 training_loop(
@@ -97,3 +100,39 @@ training_loop(
     optim_fn=optimizer,
     loss_fn=loss,
     data_t=original)
+
+with torch.no_grad():
+    n_correct = 0
+    n_samples = 0
+    n_class_correct = [0 for i in range(10)]
+    n_class_samples = [0 for i in range(10)]
+    for images, labels in original_val:
+        plt.imshow(images.view(28, 28, 1))
+        plt.show()
+        images = images.to(device)
+        labels = labels.to(device)
+        outputs = model(images).to(device)
+        # max returns (value ,index)
+        _, predicted = torch.max(outputs, 1)
+        n_samples += labels.size(0)
+        n_correct += (predicted == labels).sum().item()
+
+        theta = np.random.randint(1, 65)
+        new_img = torch.zeros(1, 28, 28)
+        new_img = ndimage.rotate(images.cpu().view(1, 28, 28), theta * 5, reshape=False)
+        new_img = torch.from_numpy(new_img)
+
+        new_img = new_img.to(device)
+
+        outputs = model(new_img.view(1, 1, 28, 28)).to(device)
+        # max returns (value ,index)
+        _, predicted = torch.max(outputs, 1)
+        n_samples += labels.size(0)
+        n_correct += (predicted == labels).sum().item()
+
+    acc = 100.0 * n_correct / n_samples
+    print(f'Accuracy of the network: {acc} %')
+
+    for i in range(10):
+        acc = 100.0 * n_class_correct[i] / n_class_samples[i]
+        print(f'Accuracy of {class_name[i]}: {acc} %')
