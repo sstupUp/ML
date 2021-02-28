@@ -63,11 +63,12 @@ loss = nn.CrossEntropyLoss()
 def training_loop(n_epoch, network, optim_fn, loss_fn, data_t):
     for i in range(0, n_epoch + 1):
         for n, target in enumerate(data_t):
-            img, lable = target
+            img, label = target
             img = img.to(device)
-            lable = lable.to(device)
+            label = label.to(device)
             # forward
             prediction = network(img)
+            print(img.shape)
             loss_train = loss_fn(prediction, label)
 
             # backward
