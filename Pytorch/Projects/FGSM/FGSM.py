@@ -21,13 +21,13 @@ import tqdm
 #//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 # Hyper-parameters
-learning_rate = 0.5e-4
+learning_rate = 1e-4
 batch_size = 128
 if torch.cuda.is_available():
     device = 'cuda'
 else:
     device = 'cpu'
-eps = 0.03
+eps = 0.3
 
 # Load datasets(MNIST)
 path = './'
@@ -73,14 +73,15 @@ class ConvNet(nn.Module):
         # For the sake of studying ML, I will use deeper network
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(3,3), stride=(2,2), padding=1)
         self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(5,5), stride=(2,2), padding=2)
-        self.fc1 = nn.Linear(7*7*64, 32)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(2*2*64, 32)
         self.fc2 = nn.Linear(32, 16)
         self.fc3 = nn.Linear(16, 10)
 
     def forward(self, x):
-        x = f.relu(self.conv1(x))
+        x = self.pool(f.relu(self.conv1(x)))
         # Batch Normalization(x)
-        x = f.relu((self.conv2(x)))
+        x = self.pool(f.relu(self.conv2(x)))
         # Batch Normalization(x)
 
         # Flattening
@@ -128,7 +129,7 @@ def training_loop(n_epoch, network, optim_fn, loss_fn, data_t):
 # Then, we use the sign of the gradiant of loss to generate adversarial attack
 
 # adv=original+ϵ∗sign(∇xJ(x,θ))
-def generate_image_adversary(model, loss_fn, data, eps=0.03):
+def generate_image_adversary(model, loss_fn, data, eps=0.3):
 
     img, label = data
 
@@ -201,7 +202,6 @@ def accuracy(model, data, classes, attack=False, eps=eps):
         for target in tqdm.tqdm(data):
             images, labels = target
             adv_img = generate_image_adversary(model=model, loss_fn=loss, data=target, eps=eps)
-            adv_img.to(device)
 
             labels = labels.to(device)
             outputs = model(adv_img).to(device)
