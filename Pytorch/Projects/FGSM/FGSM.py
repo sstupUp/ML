@@ -129,7 +129,7 @@ def training_loop(n_epoch, network, optim_fn, loss_fn, data_t):
 # Then, we use the sign of the gradiant of loss to generate adversarial attack
 
 # adv=original+ϵ∗sign(∇xJ(x,θ))
-def generate_image_adversary(model, loss_fn, data, eps=0.3):
+def generate_image_adversary(model, loss_fn, data, eps=0.03):
 
     img, label = data
 
