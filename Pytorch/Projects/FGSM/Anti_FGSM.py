@@ -21,13 +21,13 @@ import tqdm
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 # Hyper-parameters
-learning_rate = 1e-4
+learning_rate = 1e-3
 batch_size = 128
 if torch.cuda.is_available():
     device = 'cuda'
 else:
     device = 'cpu'
-eps = 0.1
+eps = 0.15
 
 # Load datasets(MNIST)
 path = './'
@@ -104,9 +104,9 @@ class ConvNet(nn.Module):
 # Training loop
 def training_loop(n_epoch, network, learning_rate, loss_fn, data_t, adv=False):
 
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(network.parameters(), lr=learning_rate)
 
-    if adv == True:
+    if adv == False:
 
         for i in range(0, n_epoch):
             loss_sum = 0
@@ -124,16 +124,17 @@ def training_loop(n_epoch, network, learning_rate, loss_fn, data_t, adv=False):
                 optimizer.step()
 
                 # print(f"Epoch: {i + 1}, Batch: {n * batch_size}/60000, Training loss {loss_train.item():.4f},")
-            print(f'\naverage loss in {i + 1}th epoch: {loss_sum / ((600000 // batch_size) + 1)}')
+            print(f'\naverage loss in {i + 1}th epoch: {loss_sum / ((batch_size) + 1)}')
     else:
         for i in range(0, n_epoch):
             loss_sum = 0
             for target in tqdm.tqdm(data_t):
-                img, label = target
-                img = img.to(device)
+                _, label = target
+                adv_img = generate_image_adversary(data=target, loss_fn=loss_fn, model=network)
+                adv_img = adv_img.to(device)
                 label = label.to(device)
                 # forward
-                prediction = network(img)
+                prediction = network(adv_img)
                 loss_train = loss_fn(prediction, label)
                 loss_sum += loss_train.item()
                 # backward
@@ -142,7 +143,7 @@ def training_loop(n_epoch, network, learning_rate, loss_fn, data_t, adv=False):
                 optimizer.step()
 
                 # print(f"Epoch: {i + 1}, Batch: {n * batch_size}/60000, Training loss {loss_train.item():.4f},")
-            print(f'\naverage loss in {i + 1}th epoch: {loss_sum / ((600000 // batch_size) + 1)}')
+            print(f'\naverage loss in {i + 1}th epoch: {loss_sum / ((batch_size) + 1)}')
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -254,7 +255,7 @@ model = ConvNet().to(device)
 loss = nn.CrossEntropyLoss()
 
 print('\nTraining the model')
-n_epochs = 1
+n_epochs = 10
 training_loop(
     n_epoch=n_epochs,
     network=model,
@@ -267,29 +268,27 @@ training_loop(
 
 tot_acc, idv_acc = accuracy(model, data_val, 10)
 print(f'Accuracy of the network: {tot_acc} %')
-for i in range(10):
-    print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
+#for i in range(10):
+ #   print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
 
 
-tot_acc, idv_acc = accuracy(model, data_val, 10, True)
+tot_acc, idv_acc = accuracy(model, data_val, 10, attack=True)
 print(f'Accuracy of the network after attacked: {tot_acc} %')
-for i in range(10):
-    print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
+#for i in range(10):
+ #   print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
 
-
-adv = generate_image_adversary(model=model, loss_fn=loss, data=data_val, eps=eps)
-
-learning_rate = 1e-5
+learning_rate = 1e-4
 print('\nre-Training the model')
-n_epochs = 1
+n_epochs = 20
 training_loop(
     n_epoch=n_epochs,
     network=model,
     learning_rate=learning_rate,
     loss_fn=loss,
-    data_t=data_t)
+    data_t=data_t,
+    adv=True)
 
-tot_acc, idv_acc = accuracy(model, data_val, 10, True)
+tot_acc, idv_acc = accuracy(model, data_val, 10, attack=True)
 print(f'Accuracy of the fine-turned network after attacked: {tot_acc} %')
-for i in range(10):
-    print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
+#for i in range(10):
+ #   print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
