@@ -27,7 +27,7 @@ if torch.cuda.is_available():
     device = 'cuda'
 else:
     device = 'cpu'
-eps = 0.15
+eps = 0.35
 
 # Load datasets(MNIST)
 path = './'
@@ -72,10 +72,11 @@ class ConvNet(nn.Module):
         '''
 
         # For the sake of studying ML, I will use deeper network
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(3, 3), stride=(2, 2), padding=1)
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(3, 3), stride=(1, 1), padding=1)
         self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(5, 5), stride=(2, 2), padding=2)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(3, 3), stride=(1, 1), padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(2 * 2 * 64, 32)
+        self.fc1 = nn.Linear(3 * 3 * 128, 32)
         self.fc2 = nn.Linear(32, 16)
         self.fc3 = nn.Linear(16, 10)
 
@@ -83,12 +84,13 @@ class ConvNet(nn.Module):
         x = self.pool(f.relu(self.conv1(x)))
         # Batch Normalization(x)
         x = self.pool(f.relu(self.conv2(x)))
+        x = self.conv3(x)
         # Batch Normalization(x)
 
         # Flattening
         x = x.view(x.size(0), -1)
-        x = f.relu(self.fc1(x))
-        x = f.relu(self.fc2(x))
+        x = torch.tanh(self.fc1(x))
+        x = torch.tanh(self.fc2(x))
         x = self.fc3(x)
 
         return x
@@ -103,11 +105,9 @@ class ConvNet(nn.Module):
 
 # Training loop
 def training_loop(n_epoch, network, learning_rate, loss_fn, data_t, adv=False):
-
     optimizer = optim.Adam(network.parameters(), lr=learning_rate)
 
     if adv == False:
-
         for i in range(0, n_epoch):
             loss_sum = 0
             for target in tqdm.tqdm(data_t):
@@ -130,7 +130,7 @@ def training_loop(n_epoch, network, learning_rate, loss_fn, data_t, adv=False):
             loss_sum = 0
             for target in tqdm.tqdm(data_t):
                 _, label = target
-                adv_img = generate_image_adversary(data=target, loss_fn=loss_fn, model=network)
+                adv_img, label = generate_image_adversary(data=target, loss_fn=loss_fn, model=network)
                 adv_img = adv_img.to(device)
                 label = label.to(device)
                 # forward
@@ -155,12 +155,26 @@ def generate_image_adversary(model, loss_fn, data, eps=0.03):
 
     img, label = data
 
+    # Adding randomness
+
+    len = img.size(0)
+    rand_idx = torch.randperm(len)
+    tmp = img
+    tmp_l = label
+
+    for i in range(len):
+        img[i] = tmp[rand_idx[i]]
+        label[i] = tmp_l[rand_idx[i]]
+
+    del tmp, tmp_l
+    torch.cuda.empty_cache()
+
     img = img.to(device)
     label = label.to(device)
 
     img.requires_grad = True
 
-    model.zero_grad()
+
     pred = model(img).to(device)
 
     loss = loss_fn(pred, label).to(device)
@@ -168,10 +182,10 @@ def generate_image_adversary(model, loss_fn, data, eps=0.03):
     loss.backward()
     img.requires_grad = False
 
-    tmp = img + eps * img.grad.data.sign()
-    tmp = torch.clamp(tmp, 0, 1)
+    img = img + eps * img.grad.data.sign()
+    img = torch.clamp(img, 0, 1)
 
-    return tmp
+    return img, label
 
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -223,9 +237,9 @@ def accuracy(model, data, classes, attack=False, eps=eps):
         n_class_samples = [0 for i in range(10)]
 
         for target in tqdm.tqdm(data):
-            images, labels = target
-            adv_img = generate_image_adversary(model=model, loss_fn=loss, data=target, eps=eps)
+            adv_img, labels = generate_image_adversary(model=model, loss_fn=loss, data=target, eps=eps)
 
+            adv_img = adv_img.to(device)
             labels = labels.to(device)
             outputs = model(adv_img).to(device)
             # max returns (value ,index)
@@ -234,7 +248,7 @@ def accuracy(model, data, classes, attack=False, eps=eps):
             n_samples += len(labels)
             n_correct += (predicted == labels).sum().item()
 
-            for i in range(images.size(0)):
+            for i in range(adv_img.size(0)):
                 label = labels[i]
                 pred = predicted[i]
 
@@ -255,18 +269,19 @@ model = ConvNet().to(device)
 loss = nn.CrossEntropyLoss()
 
 print('\nTraining the model')
-n_epochs = 10
+n_epochs = 1
 training_loop(
     n_epoch=n_epochs,
     network=model,
     learning_rate=learning_rate,
     loss_fn=loss,
-    data_t=data_t)
+    data_t=data_t,
+    adv=False)
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-tot_acc, idv_acc = accuracy(model, data_val, 10)
+tot_acc, idv_acc = accuracy(model, data_val, 10, attack=False)
 print(f'Accuracy of the network: {tot_acc} %')
 #for i in range(10):
  #   print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
@@ -279,7 +294,7 @@ print(f'Accuracy of the network after attacked: {tot_acc} %')
 
 learning_rate = 1e-4
 print('\nre-Training the model')
-n_epochs = 20
+n_epochs = 10
 training_loop(
     n_epoch=n_epochs,
     network=model,
