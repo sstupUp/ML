@@ -159,33 +159,30 @@ def generate_image_adversary(model, loss_fn, data, eps=0.03):
 
     len = img.size(0)
     rand_idx = torch.randperm(len)
-    tmp = img
-    tmp_l = label
+    tmp = img.clone()
+    tmp_l = label.clone()
 
     for i in range(len):
-        img[i] = tmp[rand_idx[i]]
-        label[i] = tmp_l[rand_idx[i]]
+        tmp[i] = img[rand_idx[i]]
+        tmp_l[i] = label[rand_idx[i]]
 
-    del tmp, tmp_l
-    torch.cuda.empty_cache()
+    tmp = tmp.to(device)
+    tmp_l = tmp_l.to(device)
 
-    img = img.to(device)
-    label = label.to(device)
-
-    img.requires_grad = True
+    tmp.requires_grad = True
 
 
-    pred = model(img).to(device)
+    pred = model(tmp).to(device)
 
-    loss = loss_fn(pred, label).to(device)
+    loss = loss_fn(pred, tmp_l).to(device)
     # we need to calculate ∇xJ(x,θ)
     loss.backward()
-    img.requires_grad = False
+    tmp.requires_grad = False
 
-    img = img + eps * img.grad.data.sign()
-    img = torch.clamp(img, 0, 1)
+    tmp = tmp + eps * tmp.grad.data.sign()
+    tmp = torch.clamp(tmp, 0, 1)
 
-    return img, label
+    return tmp, tmp_l
 
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -205,23 +202,23 @@ def accuracy(model, data, classes, attack=False, eps=eps):
 
             for target in tqdm.tqdm(data):
                 images, labels = target
-                images = images.view(images.size(0), 1, 28, 28).to(device)
-
+                images = images.to(device)
                 labels = labels.to(device)
-                outputs = model(images).to(device)
-                # max returns (value ,index)
-                _, predicted = torch.max(outputs, 1)
+                with torch.no_grad():
+                    outputs = model(images).to(device)
+                    # max returns (value ,index)
+                    _, predicted = torch.max(outputs, 1)
 
-                n_samples += len(labels)
-                n_correct += (predicted == labels).sum().item()
+                    n_samples += len(labels)
+                    n_correct += (predicted == labels).sum().item()
 
-                for i in range(images.size(0)):
-                    label = labels[i]
-                    pred = predicted[i]
+                    for i in range(images.size(0)):
+                        label = labels[i]
+                        pred = predicted[i]
 
-                    if (label == pred):
-                        n_class_correct[label] += 1
-                    n_class_samples[label] += 1
+                        if (label == pred):
+                            n_class_correct[label] += 1
+                        n_class_samples[label] += 1
 
             acc = 100.0 * n_correct / n_samples
             for i in range(10):
@@ -238,23 +235,23 @@ def accuracy(model, data, classes, attack=False, eps=eps):
 
         for target in tqdm.tqdm(data):
             adv_img, labels = generate_image_adversary(model=model, loss_fn=loss, data=target, eps=eps)
+            with torch.no_grad():
+                adv_img = adv_img.to(device)
+                labels = labels.to(device)
+                outputs = model(adv_img).to(device)
+                # max returns (value ,index)
+                _, predicted = torch.max(outputs, 1)
 
-            adv_img = adv_img.to(device)
-            labels = labels.to(device)
-            outputs = model(adv_img).to(device)
-            # max returns (value ,index)
-            _, predicted = torch.max(outputs, 1)
+                n_samples += len(labels)
+                n_correct += (predicted == labels).sum().item()
 
-            n_samples += len(labels)
-            n_correct += (predicted == labels).sum().item()
+                for i in range(adv_img.size(0)):
+                    label = labels[i]
+                    pred = predicted[i]
 
-            for i in range(adv_img.size(0)):
-                label = labels[i]
-                pred = predicted[i]
-
-                if (label == pred):
-                    n_class_correct[label] += 1
-                n_class_samples[label] += 1
+                    if (label == pred):
+                        n_class_correct[label] += 1
+                    n_class_samples[label] += 1
 
         acc = 100.0 * n_correct / n_samples
         for i in range(10):
