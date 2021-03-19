@@ -124,10 +124,13 @@ def training_loop(n_epoch, network, learning_rate, loss_fn, data_t, adv=False):
                 optimizer.step()
 
                 # print(f"Epoch: {i + 1}, Batch: {n * batch_size}/60000, Training loss {loss_train.item():.4f},")
+            tot_acc = accuracy(model, data_val, 10, attack=False)
+            train_log.write(str(tot_acc.item()) + "\n")
             print(f'\naverage loss in {i + 1}th epoch: {loss_sum / ((batch_size) + 1)}')
     else:
         for i in range(0, n_epoch):
             loss_sum = 0
+
             for target in tqdm.tqdm(data_t):
                 _, label = target
                 adv_img, label = generate_image_adversary(data=target, loss_fn=loss_fn, model=network)
@@ -143,6 +146,8 @@ def training_loop(n_epoch, network, learning_rate, loss_fn, data_t, adv=False):
                 optimizer.step()
 
                 # print(f"Epoch: {i + 1}, Batch: {n * batch_size}/60000, Training loss {loss_train.item():.4f},")
+            tot_acc = accuracy(model, data_val, 10, attack=True)
+            adv_train_log.write(str(tot_acc.item()) + "\n")
             print(f'\naverage loss in {i + 1}th epoch: {loss_sum / ((batch_size) + 1)}')
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -190,74 +195,30 @@ def generate_image_adversary(model, loss_fn, data, eps=0.03):
 
 def accuracy(model, data, classes, attack=False, eps=eps):
     print('Calculating Accuracy...')
+    accuracy = 0
+    n = 0
     if attack == False:
-        with torch.no_grad():
-            n_correct = 0
-            n_samples = 0
-            acc_arr = [0 for i in range(classes)]
-            acc = 0
+        for target in tqdm.tqdm(data):
+            n += 1
+            images, labels = target
+            images = images.to(device)
+            labels = labels.to(device)
+            with torch.no_grad():  # torch.no_grad()를 하면 gradient 계산을 수행하지 않는다.
+                prediction = model(images)
+                correct_prediction = torch.argmax(prediction, 1) == labels
+                accuracy += correct_prediction.float().mean()
 
-            n_class_correct = [0 for i in range(10)]
-            n_class_samples = [0 for i in range(10)]
-
-            for target in tqdm.tqdm(data):
-                images, labels = target
-                images = images.to(device)
-                labels = labels.to(device)
-                with torch.no_grad():
-                    outputs = model(images).to(device)
-                    # max returns (value ,index)
-                    _, predicted = torch.max(outputs, 1)
-
-                    n_samples += len(labels)
-                    n_correct += (predicted == labels).sum().item()
-
-                    for i in range(images.size(0)):
-                        label = labels[i]
-                        pred = predicted[i]
-
-                        if (label == pred):
-                            n_class_correct[label] += 1
-                        n_class_samples[label] += 1
-
-            acc = 100.0 * n_correct / n_samples
-            for i in range(10):
-                acc_arr[i] = 100.0 * n_class_correct[i] / n_class_samples[i]
-            return acc, acc_arr
+        return (accuracy / n)*100
     else:
-        n_correct = 0
-        n_samples = 0
-        acc_arr = [0 for i in range(classes)]
-        acc = 0
-
-        n_class_correct = [0 for i in range(10)]
-        n_class_samples = [0 for i in range(10)]
-
         for target in tqdm.tqdm(data):
             adv_img, labels = generate_image_adversary(model=model, loss_fn=loss, data=target, eps=eps)
-            with torch.no_grad():
-                adv_img = adv_img.to(device)
-                labels = labels.to(device)
-                outputs = model(adv_img).to(device)
-                # max returns (value ,index)
-                _, predicted = torch.max(outputs, 1)
+            labels = labels.to(device)
+            with torch.no_grad():  # torch.no_grad()를 하면 gradient 계산을 수행하지 않는다.
+                prediction = model(adv_img.to(device))
+                correct_prediction = torch.argmax(prediction, 1) == labels
+                accuracy += correct_prediction.float().mean()
 
-                n_samples += len(labels)
-                n_correct += (predicted == labels).sum().item()
-
-                for i in range(adv_img.size(0)):
-                    label = labels[i]
-                    pred = predicted[i]
-
-                    if (label == pred):
-                        n_class_correct[label] += 1
-                    n_class_samples[label] += 1
-
-        acc = 100.0 * n_correct / n_samples
-        for i in range(10):
-            acc_arr[i] = 100.0 * n_class_correct[i] / n_class_samples[i]
-        return acc, acc_arr
-
+        return (accuracy / n) * 100
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -265,8 +226,11 @@ def accuracy(model, data, classes, attack=False, eps=eps):
 model = ConvNet().to(device)
 loss = nn.CrossEntropyLoss()
 
+train_log = open("C:\\Users\\smu\\PycharmProjects\\An\\Machine_Learning\\Pytorch\\Projects\\FGSM\\Acc_log_per_epoch.txt", 'a')
+adv_train_log = open("C:\\Users\\smu\\PycharmProjects\\An\\Machine_Learning\\Pytorch\\Projects\\FGSM\\Acc_log_per_epoch_adv.txt", 'a')
+#adv_val_log = open("C:\\Users\\smu\\PycharmProjects\\An\\Machine_Learning\\Pytorch\\Projects\\FGSM\\Acc_log_adv_val.txt", 'a')
 print('\nTraining the model')
-n_epochs = 1
+n_epochs = 100
 training_loop(
     n_epoch=n_epochs,
     network=model,
@@ -278,20 +242,20 @@ training_loop(
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-tot_acc, idv_acc = accuracy(model, data_val, 10, attack=False)
+tot_acc = accuracy(model, data_val, 10, attack=False)
 print(f'Accuracy of the network: {tot_acc} %')
 #for i in range(10):
  #   print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
 
 
-tot_acc, idv_acc = accuracy(model, data_val, 10, attack=True)
+tot_acc = accuracy(model, data_val, 10, attack=True)
 print(f'Accuracy of the network after attacked: {tot_acc} %')
 #for i in range(10):
  #   print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
 
 learning_rate = 1e-4
 print('\nre-Training the model')
-n_epochs = 10
+n_epochs = 100
 training_loop(
     n_epoch=n_epochs,
     network=model,
@@ -300,7 +264,7 @@ training_loop(
     data_t=data_t,
     adv=True)
 
-tot_acc, idv_acc = accuracy(model, data_val, 10, attack=True)
+tot_acc = accuracy(model, data_val, 10, attack=True)
 print(f'Accuracy of the fine-turned network after attacked: {tot_acc} %')
 #for i in range(10):
  #   print(f'Accuracy of {class_name[i]}: {idv_acc[i]} %')
